@@ -35,8 +35,10 @@ button,input,textarea{font-family:inherit}
 .mlbl{margin:0 0 17u 6u;font-size:32u;line-height:46u;font-weight:300;text-transform:uppercase}
 .mlbl b{font-weight:700}
 .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:25u 18u}
-.mb{height:69u;border:0;border-radius:20u;background:#480E2D;color:#D0D8CC;font-size:36u;font-weight:700;text-transform:uppercase;cursor:pointer;padding:0 10u}
+.mb{min-height:69u;border:0;border-radius:20u;background:#480E2D;color:#D0D8CC;font-size:36u;font-weight:700;text-transform:uppercase;cursor:pointer;padding:12u 10u;line-height:1.2}
 .mgrid .mb:last-child:nth-child(odd){grid-column:1/-1}
+.mgrid.stack{grid-template-columns:1fr}
+.mgrid.stack .mb{font-size:29u;padding:22u 24u}
 .back{display:block;margin:121u auto 0;border:0;background:none;color:#480E2D;font-size:30u;font-weight:600;text-transform:uppercase;cursor:pointer}
 
 /* PÁGINA 3 */
@@ -72,7 +74,7 @@ document.head.appendChild(st);
 const tg=window.Telegram&&Telegram.WebApp;
 if(tg){tg.ready();tg.expand();}
 const $app=document.getElementById('app');
-const warn=m=>tg?tg.showAlert(m):alert(m);
+const warn=m=>{try{if(tg&&tg.isVersionAtLeast&&tg.isVersionAtLeast('6.2')){tg.showAlert(m);return;}}catch(e){}alert(m);};
 
 /* ===== CONFIGURAÇÃO (edite aqui) ===== */
 const N={spotify:'Spotify',amazon:'Amazon',billboard:'Billboard',deezer:'Deezer',empire:'Empire Records',selvari:'Selvari (agência)',hbo:'HBO',netflix:'Netflix',calvinklein:'Calvin Klein',versace:'Versace',dior:'Dior',ciroc:'Ciroc',absolut:'Absolut',saturn:'Saturn',vivalatino:'Viva Latino',fader:'The Fader',spotifynews:'Spotify Newsroom'};
@@ -84,7 +86,7 @@ const SEC={ // profissão -> seções da página 2: [formulário, título, empre
   atleta:[['atleta','Como <b>atleta</b>:',['selvari']],['embaixador','Como <b>embaixador</b>:',EMB]]
 };
 const PL=['spotify','saturn','billboard','selvari','vivalatino'];
-const SHAPE='Adicione duas fotos do seu shape (fotos de photoshoot e fundo único, selfies não são permitidas):';
+const SHAPE='Adicione duas fotos suas (fotos de photoshoot e fundo único, selfies não são permitidas):';
 const CAN='@ do seu canal profissional',PES='Seu @ pessoal',SH='Nome e @ do seu shape';
 const M2={min:2,max:2,img:1,l:SHAPE};
 const F={ // campos: [rótulo, tipo] (tipo: vazio=texto, 'l'=texto longo, 'yn'=sim/não, 'co'=empresas)
@@ -130,13 +132,13 @@ function next(){
   if(S.obj==='contrato')return menu(SEC[S.prof].map(([fk,l,cs])=>({l,items:cs.map(c=>[N[c],()=>show(formView(fk,c))])})));
   if(S.prof!=='cantor')return formView('noticia','fader');
   const news=menu([{l:'Publique sua <b>notícia</b> em:',items:['fader','spotifynews'].map(c=>[N[c],()=>show(formView('noticia',c))])}]);
-  return menu([{l:'Como você quer ter <b>mais alcance</b>?',items:[['Tenha sua música em nossas playlists',()=>show(formView('playlist'))],['Publique uma notícia sobre seu trabalho',()=>show(news)]]}]);
+  return menu([{l:'Como você quer ter <b>mais alcance</b>?',items:[['Tenha sua música em nossas playlists',()=>show(formView('playlist'))],['Publique uma notícia sobre seu trabalho',()=>show(news)]]}],true);
 }
 
 /* PÁGINA 2 */
-function menu(secs){
+function menu(secs,stack){
   const fn=()=>{
-    paint('menu','#D0D8CC',secs.map((s,si)=>`<div class="msec"><p class="mlbl">${s.l}</p><div class="mgrid">${s.items.map((it,i)=>`<button class="mb" data-s="${si}" data-i="${i}">${it[0]}</button>`).join('')}</div></div>`).join('')+`<button class="back" id="bk">‹ Voltar</button>`);
+    paint('menu','#D0D8CC',secs.map((s,si)=>`<div class="msec"><p class="mlbl">${s.l}</p><div class="mgrid${stack?' stack':''}">${s.items.map((it,i)=>`<button class="mb" data-s="${si}" data-i="${i}">${it[0]}</button>`).join('')}</div></div>`).join('')+`<button class="back" id="bk">‹ Voltar</button>`);
     $app.querySelectorAll('.mb').forEach(b=>b.onclick=()=>secs[b.dataset.s].items[b.dataset.i][1]());
     document.getElementById('bk').onclick=back;
   };
@@ -184,17 +186,23 @@ function formView(fk,comp){
       }
       if(!dest.length)dest.push(comp);
       if(files.length<d.m.min)return warn(d.m.min>1?`Envie ${d.m.min} fotos.`:'Envie ao menos 1 mídia.');
+      if(!tg||!tg.initData)return warn('Para enviar, abra o miniapp pelo botão do bot dentro do Telegram.');
       const fd=new FormData();
       fd.append('initData',tg?tg.initData:'');fd.append('form',fk);
       fd.append('companies',JSON.stringify(dest));fd.append('answers',JSON.stringify(ans));
       files.forEach(f=>fd.append('files',f));
       btn.disabled=true;btn.textContent='Enviando…';
+      const ac=new AbortController(),to=setTimeout(()=>ac.abort(),120000);
       try{
-        const r=await fetch('/api/submit',{method:'POST',body:fd});
+        const r=await fetch('/api/submit',{method:'POST',body:fd,signal:ac.signal});
         const j=await r.json().catch(()=>({}));
+        clearTimeout(to);
         if(!r.ok||!j.ok)throw new Error(j.error||'falha no envio');
         show(thanksView(fk));
-      }catch(e){warn('Não foi possível enviar: '+e.message);btn.disabled=false;btn.textContent='Enviar ›';}
+      }catch(e){
+        clearTimeout(to);btn.disabled=false;btn.textContent='Enviar ›';
+        warn('Não foi possível enviar: '+(e.name==='AbortError'?'o envio demorou demais, tente de novo.':e.message));
+      }
     };
   };
 }
