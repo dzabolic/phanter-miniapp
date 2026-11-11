@@ -37,7 +37,7 @@ async function api(method, fields, fileList = []) {
   const fd = new FormData();
   for (const [k, v] of Object.entries(fields)) fd.append(k, v);
   fileList.forEach(([n, f]) => fd.append(n, new Blob([f.buffer], { type: f.mimetype }), f.originalname));
-  const r = await fetch(`https://api.telegram.org/bot${TOKEN}/${method}`, { method: 'POST', body: fd });
+  const r = await fetch(`https://api.telegram.org/bot${TOKEN}/${method}`, { method: 'POST', body: fd, signal: AbortSignal.timeout(60000) });
   const j = await r.json();
   if (!j.ok) throw new Error(j.description);
   return j;
